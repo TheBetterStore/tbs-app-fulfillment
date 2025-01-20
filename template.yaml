@@ -1,0 +1,48 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  The Better Store Fulfillment API
+
+Transform:
+  - AWS::Serverless-2016-10-31
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+
+  InfraBaseCFName:
+    Type: String
+
+  AppAdminCFName:
+    Type: String
+
+  AppLoginCFName:
+    Type: String
+
+  FulfillReservedConcurrency:
+    Type: String
+    Default: 2
+
+  PaymentApiUrl:
+    Type: String
+    Default: https://api.thebetterstore.net
+
+  AppLoggingLevel:
+    Type: String
+    AllowedValues: [TRACE, DEBUG, INFO, WARN, ERROR, FATAL]
+    Default: INFO
+
+  SystemLogLevel:
+    Type: String
+    AllowedValues: [DEBUG, INFO, WARN]
+    Default: INFO
+
+Resources:
+
+  FulfillFunctionLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-FulfillFunction"
+      RetentionInDays: 365
+
+  # Remaining pending implementation
