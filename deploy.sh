@@ -1,7 +1,7 @@
 Environment=prod
 DEPLOY_BUCKET=$MY_DEPLOY_BUCKET
 
-APP_NAME=tbs-app-order
+APP_NAME=tbs-app-fulfillment
 STACK_NAME=$APP_NAME-$Environment
 
 sam build --cached
