@@ -19,7 +19,7 @@ Parameters:
   AppLoginCFName:
     Type: String
 
-  FulfillReservedConcurrency:
+  OrderConfirmedReservedConcurrency:
     Type: String
     Default: 2
 
@@ -39,10 +39,75 @@ Parameters:
 
 Resources:
 
-  FulfillFunctionLogs:
+  OrderConfirmedFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: index.handler
+      Runtime: nodejs22.x
+      MemorySize: 512
+      Timeout: 10
+      AutoPublishAlias: prod
+      Description: Order confirmed event fulfillment function
+      Tracing: Active
+      DeploymentPreference:
+        Type: AllAtOnce
+      ReservedConcurrentExecutions: !Sub ${OrderConfirmedReservedConcurrency}
+      LoggingConfig:
+        LogGroup: !Ref OrderConfirmedFunctionLogs
+        LogFormat: JSON
+        ApplicationLogLevel: !Ref AppLoggingLevel
+        SystemLogLevel: !Ref SystemLogLevel
+      Environment:
+        Variables:
+          TBS_EVENTBUS_ARN:
+            Fn::ImportValue: !Sub ${InfraBaseCFName}:TbsEventBusArn
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: events:PutEvents
+              Resource:
+                Fn::ImportValue: !Sub ${InfraBaseCFName}:TbsEventBusArn
+            - Effect: Allow
+              Action: ssm:GetParameter
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}*"
+    Metadata: # Manage esbuild properties
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: "es2020"
+        Sourcemap: true
+        EntryPoints:
+          - src/application/event-handlers/order-confirmed/index.ts
+
+  OrderConfirmedFunctionLogs:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-FulfillFunction"
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-OrderConfirmedFunction"
       RetentionInDays: 365
+
+  OrderConfirmedEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Subscribe to order paid events
+      EventBusName:
+        Fn::ImportValue: !Sub ${InfraBaseCFName}:TbsEventBusArn
+      EventPattern:
+        source:
+          - 'tbs-app-order.AppOrderService'
+        detail-type:
+          - 'OrderConfirmedEvent'
+      State: ENABLED
+      Targets:
+        - Id: OrderConfirmed
+          Arn: !GetAtt OrderConfirmedFunction.Arn
+
+  OrderConfirmedRulePermissions:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref OrderConfirmedFunction
+      Action: lambda:InvokeFunction
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt OrderConfirmedEventRule.Arn
 
   # Remaining pending implementation
