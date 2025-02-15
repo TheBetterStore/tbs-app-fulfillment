@@ -19,6 +19,10 @@ Parameters:
   AppLoginCFName:
     Type: String
 
+  OrderCFStackName:
+    Type: String
+    Default: tbs-app-order-prod
+
   OrderConfirmedReservedConcurrency:
     Type: String
     Default: 2
@@ -94,9 +98,9 @@ Resources:
         Fn::ImportValue: !Sub ${InfraBaseCFName}:TbsEventBusArn
       EventPattern:
         source:
-          - 'tbs-app-order.AppOrderService'
+          - !Sub ${OrderCFStackName}-DynamoDbStreamEventPipe
         detail-type:
-          - 'OrderConfirmedEvent'
+          - 'OrderEvent'
       State: ENABLED
       Targets:
         - Id: OrderConfirmed
