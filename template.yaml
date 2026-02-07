@@ -112,6 +112,10 @@ Resources:
       Targets:
         - Id: OrderConfirmed
           Arn: !GetAtt OrderConfirmedFunction.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt OrderConfirmedRuleDLQ.Arn
+          RetryPolicy:
+            MaximumRetryAttempts: 0
 
   OrderConfirmedRulePermissions:
     Type: AWS::Lambda::Permission
@@ -133,6 +137,29 @@ Resources:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub "${AWS::StackName}-OrderConfirmedFunctionDLQ"
+
+  OrderConfirmedRuleDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-OrderConfirmedRuleDLQ"
+
+  UserOrderUpsertedRuleDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+          -
+            Action:
+              - "SQS:SendMessage"
+            Effect: "Allow"
+            Resource: !GetAtt OrderConfirmedRuleDLQ.Arn
+            Principal:
+              Service: events.amazonaws.com
+            Condition:
+              ArnEquals:
+                "aws:SourceArn": !GetAtt OrderConfirmedEventRule.Arn
+      Queues:
+        - !Ref OrderConfirmedRuleDLQ
 
 Outputs:
 
@@ -165,3 +192,21 @@ Outputs:
     Value: !Ref OrderConfirmedFunctionDLQ
     Export:
       Name: !Sub '${AWS::StackName}:OrderConfirmedFunctionDLQ:Url'
+
+  OrderConfirmedRuleDLQName:
+    Description: Queue Name
+    Value: !GetAtt OrderConfirmedRuleDLQ.QueueName
+    Export:
+      Name: !Sub '${AWS::StackName}:OrderConfirmedRuleDLQ:Name'
+
+  OrderConfirmedRuleDLQArn:
+    Description: Queue Arn
+    Value: !GetAtt OrderConfirmedRuleDLQ.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}:OrderConfirmedRuleDLQ:Arn'
+
+  OrderConfirmedRuleDLQUrl:
+    Description: Queue Url
+    Value: !Ref OrderConfirmedRuleDLQ
+    Export:
+      Name: !Sub '${AWS::StackName}:OrderConfirmedRuleDLQ:Url'
