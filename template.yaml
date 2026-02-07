@@ -19,6 +19,14 @@ Parameters:
   AppLoginCFName:
     Type: String
 
+  OrderCFStackName:
+    Type: String
+    Default: tbs-app-order-prod
+
+  SreErrorHandlerCFStackName:
+    Type: String
+    Default: tbs-sre-errorhandler-prod
+
   OrderConfirmedReservedConcurrency:
     Type: String
     Default: 2
@@ -50,6 +58,9 @@ Resources:
       AutoPublishAlias: prod
       Description: Order confirmed event fulfillment function
       Tracing: Active
+      DeadLetterQueue:
+        TargetArn: !GetAtt OrderConfirmedFunctionDLQ.Arn
+        Type: SQS
       DeploymentPreference:
         Type: AllAtOnce
       ReservedConcurrentExecutions: !Sub ${OrderConfirmedReservedConcurrency}
@@ -94,13 +105,17 @@ Resources:
         Fn::ImportValue: !Sub ${InfraBaseCFName}:TbsEventBusArn
       EventPattern:
         source:
-          - 'tbs-app-order.AppOrderService'
+          - !Sub ${OrderCFStackName}-DynamoDbStreamEventPipe
         detail-type:
-          - 'OrderConfirmedEvent'
+          - 'OrderEvent'
       State: ENABLED
       Targets:
         - Id: OrderConfirmed
           Arn: !GetAtt OrderConfirmedFunction.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt OrderConfirmedRuleDLQ.Arn
+          RetryPolicy:
+            MaximumRetryAttempts: 0
 
   OrderConfirmedRulePermissions:
     Type: AWS::Lambda::Permission
@@ -110,4 +125,88 @@ Resources:
       Principal: "events.amazonaws.com"
       SourceArn: !GetAtt OrderConfirmedEventRule.Arn
 
-  # Remaining pending implementation
+  OrderConfirmedFunctionDLQEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 1
+      EventSourceArn: !GetAtt OrderConfirmedFunctionDLQ.Arn
+      FunctionName:
+        Fn::ImportValue: !Sub ${SreErrorHandlerCFStackName}:PersistDlqErrorFunction:Name
+
+  OrderConfirmedFunctionDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-OrderConfirmedFunctionDLQ"
+
+  OrderConfirmedRuleDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-OrderConfirmedRuleDLQ"
+
+  UserOrderUpsertedRuleDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+          -
+            Action:
+              - "SQS:SendMessage"
+            Effect: "Allow"
+            Resource: !GetAtt OrderConfirmedRuleDLQ.Arn
+            Principal:
+              Service: events.amazonaws.com
+            Condition:
+              ArnEquals:
+                "aws:SourceArn": !GetAtt OrderConfirmedEventRule.Arn
+      Queues:
+        - !Ref OrderConfirmedRuleDLQ
+
+Outputs:
+
+  OrderConfirmedFunctionName:
+    Description: Function Name
+    Value: !Ref OrderConfirmedFunction
+    Export:
+      Name: !Sub '${AWS::StackName}:OrderConfirmedFunction:Name'
+
+  OrderConfirmedFunctionArn:
+    Description: Function Arn
+    Value: !GetAtt OrderConfirmedFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}:OrderConfirmedFunction:Arn'
+
+  OrderConfirmedFunctionDLQName:
+    Description: Queue Name
+    Value: !GetAtt OrderConfirmedFunctionDLQ.QueueName
+    Export:
+      Name: !Sub '${AWS::StackName}:OrderConfirmedFunctionDLQ:Name'
+
+  OrderConfirmedFunctionDLQArn:
+    Description: Queue Arn
+    Value: !GetAtt OrderConfirmedFunctionDLQ.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}:OrderConfirmedFunctionDLQ:Arn'
+
+  OrderConfirmedFunctionDLQUrl:
+    Description: Queue Url
+    Value: !Ref OrderConfirmedFunctionDLQ
+    Export:
+      Name: !Sub '${AWS::StackName}:OrderConfirmedFunctionDLQ:Url'
+
+  OrderConfirmedRuleDLQName:
+    Description: Queue Name
+    Value: !GetAtt OrderConfirmedRuleDLQ.QueueName
+    Export:
+      Name: !Sub '${AWS::StackName}:OrderConfirmedRuleDLQ:Name'
+
+  OrderConfirmedRuleDLQArn:
+    Description: Queue Arn
+    Value: !GetAtt OrderConfirmedRuleDLQ.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}:OrderConfirmedRuleDLQ:Arn'
+
+  OrderConfirmedRuleDLQUrl:
+    Description: Queue Url
+    Value: !Ref OrderConfirmedRuleDLQ
+    Export:
+      Name: !Sub '${AWS::StackName}:OrderConfirmedRuleDLQ:Url'
